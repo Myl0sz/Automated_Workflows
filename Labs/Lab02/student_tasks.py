@@ -8,7 +8,14 @@ def resolve_paths(config, config_path):
     Make the configuration file's parent the anchor for all three paths.
     Preserve absolute paths. Do not create files here or change the working directory.
     """
-    return {key:Path(config[key]).resolve() for key in ('database','preview_directory','log_file')}
+    config_directory = Path(config_path).resolve().parent
+    paths = {}
+    for key in ('database','preview_directory','log_file'):
+        path = Path(config[key])
+        if not path.is_absolute():
+            path = config_directory / path
+        paths[key] = path.resolve()
+    return paths
 
 def choose_until(explicit_until=None, clock=None):
     """Exercise 2: this copied demonstration end never discovers fresh scenes.
@@ -16,7 +23,13 @@ def choose_until(explicit_until=None, clock=None):
     current aware UTC clock once. clock is supplied only by the checks.
     Reject timestamps without a timezone instead of assuming local time.
     """
-    return '2025-06-15T00:00:00Z'
+    if explicit_until is not None:
+        return utc_text(utc_parse(explicit_until))
+
+    current_time = clock() if clock is not None else datetime.now(timezone.utc)
+    if current_time.tzinfo is None or current_time.utcoffset() is None:
+        raise ValueError('Clock must return a timezone-aware datetime')
+    return utc_text(current_time)
 
 def execute_job(job, logger):
     """Exercise 3: the terminal currently claims success after a failed job.
@@ -26,6 +39,6 @@ def execute_job(job, logger):
     """
     try:
         return 0, job()
-    except Exception:
-        logger.info('Finished')
-        return 0, {'status':'succeeded'}
+    except Exception as error:
+        logger.exception('Job failed')
+        return 1, {'status':'failed','error':str(error)}
